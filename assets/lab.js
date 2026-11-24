@@ -39,8 +39,9 @@ window.LAB_CATALOG = {
   if (params.get('gtm') === 'off') { try { localStorage.removeItem('lab_gtm'); } catch (e) {} }
   else if (/^GTM-[A-Z0-9]{4,12}$/.test(fromUrl)) { try { localStorage.setItem('lab_gtm', fromUrl); } catch (e) {} }
 
-  var gtmId = null;
-  try { gtmId = localStorage.getItem('lab_gtm'); } catch (e) {}
+  // Prioridade: ID na URL > ID salvo no navegador
+  var gtmId = /^GTM-[A-Z0-9]{4,12}$/.test(fromUrl) ? fromUrl : null;
+  if (!gtmId && params.get('gtm') !== 'off') { try { gtmId = localStorage.getItem('lab_gtm'); } catch (e) {} }
 
   if (gtmId) {
     // Snippet oficial do GTM (parte <head>), apenas com o ID dinâmico
@@ -67,8 +68,25 @@ window.LAB_CATALOG = {
       : 'LAB · nenhum GTM carregado. Abra a página com <code>?gtm=GTM-XXXXXXX</code> no fim da URL.';
     document.body.prepend(bar);
     render();
+    document.querySelectorAll('a[href]').forEach(function (a) {
+      var h = a.getAttribute('href');
+      if (h && h.charAt(0) !== '#' && !/^(https?:|mailto:|tel:)/.test(h)) a.setAttribute('href', withGtm(h));
+    });
     wire();
   });
+
+  // Acrescenta ?gtm=ID numa URL interna (o contêiner não se perde na navegação,
+  // mesmo quando o navegador ou o Tag Assistant não guardam o localStorage)
+  function withGtm(href) {
+    if (!gtmId || !href) return href;
+    try {
+      var u = new URL(href, location.href);
+      if (u.origin !== location.origin || !/\.html$|\/$/.test(u.pathname)) return href;
+      u.searchParams.set('gtm', gtmId);
+      return u.pathname.split('/').pop() + u.search + u.hash;
+    } catch (e) { return href; }
+  }
+  window.lab_withGtm = withGtm;
 
   function fmt(v) { return typeof v === 'number' ? v.toLocaleString('pt-BR') : v; }
 
@@ -156,7 +174,7 @@ window.LAB_CATALOG = {
           value: 1, currency: 'BRL'
         });
         // pequeno atraso para as tags saírem antes do redirecionamento
-        setTimeout(function () { location.href = 'obrigado.html'; }, 400);
+        setTimeout(function () { location.href = withGtm('obrigado.html'); }, 400);
       });
     }
 
